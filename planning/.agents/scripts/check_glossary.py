@@ -13,8 +13,24 @@ GLOSSARY = ROOT / "planning" / "docs" / "glossary"
 HEADER = ["中文術語", "英文名／識別符", "概念", "來源", "狀態", "規範位置", "別名與舊叫法"]
 SECTIONS = ["## 本專案自造", "## 外部既有"]
 NOT_TABLES = {"README.md", "conflicts.md"}
-PUBLIC_ITEM = re.compile(r"^\s*pub\s+(?:struct|enum|trait|type|fn|const)\s+([A-Za-z_][A-Za-z0-9_]*)", re.M)
+PUBLIC_ITEM = re.compile(r"^\s{0,4}pub\s+(?:mod|struct|enum|trait|type|fn|const)\s+([A-Za-z_][A-Za-z0-9_]*)")
 IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def public_items(text: str) -> set[str]:
+    """Public items of a module and of its public submodules; methods and private modules are skipped."""
+    names, skipping = set(), False
+    for line in text.splitlines():
+        if skipping:
+            skipping = not line.startswith("}")
+            continue
+        if re.match(r"^(impl\b|mod\s|#\[cfg\(test\)\])", line):
+            skipping = not line.rstrip().endswith((";", "]"))
+            continue
+        match = PUBLIC_ITEM.match(line)
+        if match:
+            names.add(match.group(1))
+    return names
 
 
 def cells(line: str) -> list[str]:
@@ -73,7 +89,7 @@ def main() -> int:
     if source.exists():
         public = set()
         for path in source.rglob("*.rs"):
-            public.update(PUBLIC_ITEM.findall(path.read_text(encoding="utf-8")))
+            public.update(public_items(path.read_text(encoding="utf-8")))
         missing = sorted(public - known)
         if missing:
             print("public names not in the glossary (decide whether each carries a concept):")
